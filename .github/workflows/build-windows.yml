@@ -1,0 +1,74 @@
+name: Build Windows (custom)
+
+on:
+  workflow_dispatch:
+    inputs:
+      hide:
+        description: "Widgets to hide (comma separated)"
+        default: "label_16,label_4,watt"
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      # Qt6 source (same branch the official MSVC2022 build uses)
+      - uses: actions/checkout@v4
+        with:
+          repository: cagnulein/qdomyos-zwift
+          ref: qt6
+          submodules: recursive
+
+      # Insert setVisible(false) lines after ui->setupUi(this);
+      - name: Hide widgets
+        shell: pwsh
+        run: |
+          $lines = "${{ github.event.inputs.hide }}".Split(",") | ForEach-Object { "    ui->$($_.Trim())->setVisible(false);" }
+          $f = "src/mainwindow.cpp"
+          $c = Get-Content $f -Raw
+          $c = $c.Replace("ui->setupUi(this);", "ui->setupUi(this);`n" + ($lines -join "`n"))
+          Set-Content $f $c
+          Select-String -Path $f -Pattern "setVisible\(false\)" | Select-Object -First 20
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          modules: 'qtnetworkauth qtcharts qtconnectivity qtspeech qtpositioning qtwebsockets qtlocation qtmultimedia qtwebengine qtwebview qtwebchannel qthttpserver'
+          dir: "${{ github.workspace }}/qt/"
+          cache: true
+
+      - name: Install MSVC compiler
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: vcpkg deps (protobuf, abseil)
+        working-directory: ${{ runner.workspace }}
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat
+          echo '{ "name": "qdomyos-zwift", "dependencies": ["protobuf","protobuf-c","abseil"], "builtin-baseline": "8c2fcacefba009d63672f9d137f192765e632c9f" }' > vcpkg.json
+          .\vcpkg\vcpkg install --triplet x64-windows --x-install-root=${{ runner.workspace }}\vcpkg\installed
+
+      - name: Build
+        run: |
+          lrelease src/qdomyos-zwift.pri
+          qmake
+          nmake
+          cd src/debug
+          mkdir output
+          cp qdomyos-zwift.* output/
+          cd output
+          windeployqt --qmldir ../../ qdomyos-zwift.exe
+          cp ../../../windows_openssl/*.* .
+          Copy-Item -Path ${{ runner.workspace }}\vcpkg\installed\x64-windows\bin\*.* -Destination .
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: qz-windows-custom
+          path: src/debug/output/qdomyos-zwift.exe
