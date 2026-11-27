@@ -5,7 +5,8 @@ on:
     inputs:
       hide:
         description: "Widgets to hide (comma separated)"
-        default: "label_17,label_10,odometer,label_19,label_12,calories,label_22,label_23,cadence,resistanceMinus,resistancePlus,label_24,label_25,resistance,label_4,label_16,watt,fanSpeedMinus,fanBar,label_21,fanSpeedPlus,weightIcon,weightDescription,weight"        required: true
+        default: "label_17,label_10,odometer,label_19,label_12,calories,label_22,label_23,cadence,resistanceMinus,resistancePlus,label_24,label_25,resistance,label_4,label_16,watt,fanSpeedMinus,fanBar,label_21,fanSpeedPlus,weightIcon,weightDescription,weight"
+        required: true
       big:
         description: "Widgets to enlarge (comma separated)"
         default: "speed,inclination,heartrate,elevationGain,pace,label,label_2,label_3,label_11,label_27,speedMinus,speedPlus,inclinationMinus,inclinationPlus"
@@ -13,6 +14,14 @@ on:
       fontsize:
         description: "Font size (pt) for enlarged widgets"
         default: "22"
+        required: true
+      huge:
+        description: "Widgets with extra big font (comma separated)"
+        default: "pace,heartrate"
+        required: true
+      hugesize:
+        description: "Extra big font size (pt)"
+        default: "36"
         required: true
 
 jobs:
@@ -36,6 +45,13 @@ jobs:
             $w = $w.Trim()
             $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.fontsize }}); ui->$w->setFont(f); ui->$w->setMaximumWidth(QWIDGETSIZE_MAX); }"
           }
+          foreach ($w in "${{ github.event.inputs.huge }}".Split(",")) {
+            $w = $w.Trim()
+            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.hugesize }}); ui->$w->setFont(f); }"
+          }
+          # move Inclination to its own line (below Speed / Heart rate)
+          $code += "    ui->horizontalLayout_8->removeWidget(ui->frame_2);"
+          $code += "    for (int i = 0; i < ui->verticalLayout_4->count(); i++) if (ui->verticalLayout_4->itemAt(i)->layout() == ui->horizontalLayout_8) { ui->verticalLayout_4->insertWidget(i + 1, ui->frame_2); break; }"
           $f = "src/mainwindow.cpp"
           $c = Get-Content $f -Raw
           $c = $c.Replace("ui->setupUi(this);", "ui->setupUi(this);`n" + ($code -join "`n"))
