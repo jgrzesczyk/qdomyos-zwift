@@ -124,29 +124,17 @@ jobs:
         with:
           arch: x64
 
-      - name: vcpkg deps (protobuf, abseil)
-        working-directory: ${{ runner.workspace }}
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git
-          .\vcpkg\bootstrap-vcpkg.bat
-          echo '{ "name": "qdomyos-zwift", "dependencies": ["protobuf","protobuf-c","abseil"], "builtin-baseline": "8c2fcacefba009d63672f9d137f192765e632c9f" }' > vcpkg.json
-          .\vcpkg\vcpkg install --triplet x64-windows --x-install-root=${{ runner.workspace }}\vcpkg\installed
-
+      # vcpkg (protobuf/abseil) not needed: the .pri does not link them, and their DLLs are already in your output folder
       - name: Build
+        env:
+          CL: /MP   # compile several .cpp files in parallel
         run: |
           lrelease src/qdomyos-zwift.pri
           qmake
           nmake
-          cd src/debug
-          mkdir output
-          cp qdomyos-zwift.* output/
-          cd output
-          windeployqt --qmldir ../../ qdomyos-zwift.exe
-          cp ../../../windows_openssl/*.* .
-          Copy-Item -Path ${{ runner.workspace }}\vcpkg\installed\x64-windows\bin\*.* -Destination .
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: qz-windows-custom
-          path: src/debug/output/qdomyos-zwift.exe
+          path: src/debug/qdomyos-zwift.exe
