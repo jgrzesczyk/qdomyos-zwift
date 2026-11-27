@@ -82,6 +82,7 @@ jobs:
                           if (step != qzLastStep || rows != qzLastRows) {
                               qzLastStep = step;
                               qzLastRows = rows;
+                              const QSignalBlocker qzBlock(ui->tableWidget); // no cellChanged -> no crash / program reset
                               for (int r = 0; r < rows; r++) {
                                   for (int c = 0; c < ui->tableWidget->columnCount(); c++) {
                                       QTableWidgetItem *it = ui->tableWidget->item(r, c);
