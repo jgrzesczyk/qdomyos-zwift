@@ -9,7 +9,7 @@ on:
         required: true
       big:
         description: "Widgets to enlarge (comma separated)"
-        default: "speed,inclination,heartrate,elevationGain,pace,label,label_2,label_3,label_11,label_27,speedMinus,speedPlus,inclinationMinus,inclinationPlus"
+        default: "speed,inclination,heartrate,elevationGain,pace,label,label_2,label_3,label_11,label_27,label_7,speedMinus,speedPlus,inclinationMinus,inclinationPlus"
         required: true
       fontsize:
         description: "Font size (pt) for enlarged widgets"
@@ -17,7 +17,7 @@ on:
         required: true
       huge:
         description: "Widgets with extra big font (comma separated)"
-        default: "pace,heartrate"
+        default: "pace,heartrate,trainProgramCurrentRowElapsedTime"
         required: true
       hugesize:
         description: "Extra big font size (pt)"
@@ -52,13 +52,20 @@ jobs:
           }
           foreach ($w in "${{ github.event.inputs.huge }}".Split(",")) {
             $w = $w.Trim()
-            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.hugesize }}); f.setBold(true); ui->$w->setFont(f); }"
+            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.hugesize }}); f.setWeight(QFont::Black); ui->$w->setFont(f); }"
           }
           # Inclination -> own line under Speed; Heart rate -> same line as Pace
           $code += "    ui->horizontalLayout_8->removeWidget(ui->frame_2);"
           $code += "    for (int i = 0; i < ui->verticalLayout_4->count(); i++) if (ui->verticalLayout_4->itemAt(i)->layout() == ui->horizontalLayout_8) { ui->verticalLayout_4->insertWidget(i + 1, ui->frame_2); break; }"
           $code += "    ui->horizontalLayout_8->removeWidget(ui->frame_3);"
           $code += "    ui->horizontalLayout_18->addWidget(ui->frame_3);"
+          # Remaining time -> own row (under the table), value bold like Pace
+          $code += "    ui->horizontalLayout_11->removeWidget(ui->label_7);"
+          $code += "    ui->horizontalLayout_11->removeWidget(ui->trainProgramCurrentRowElapsedTime);"
+          $code += "    ui->horizontalLayout_12->addWidget(ui->label_7);"
+          $code += "    ui->horizontalLayout_12->addWidget(ui->trainProgramCurrentRowElapsedTime, 1);"
+          # Zwift button same height as Treadmill / Chart buttons
+          $code += "    ui->connectionToZwift->setMinimumHeight(qMax(ui->connectionToTreadmill->sizeHint().height(), ui->chart->sizeHint().height()));"
           # allow maximize / minimize (QDialog has no such buttons by default)
           $code += "    setWindowFlags(windowFlags() | Qt::Window | Qt::WindowMinMaxButtonsHint);"
           $code += "    ui->label_7->setText(QStringLiteral(""Current Row Remaining Time:""));"
