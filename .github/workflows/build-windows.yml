@@ -5,7 +5,14 @@ on:
     inputs:
       hide:
         description: "Widgets to hide (comma separated)"
-        default: "label_16,label_4,watt"
+        default: "label_17,label_10,odometer,label_19,label_12,calories,label_22,label_23,cadence,resistanceMinus,resistancePlus,label_24,label_25,resistance,label_4,label_16,watt,fanSpeedMinus,fanBar,label_21,fanSpeedPlus,weightIcon,weightDescription,weight"        required: true
+      big:
+        description: "Widgets to enlarge (comma separated)"
+        default: "speed,inclination,heartrate,elevationGain,pace,label,label_2,label_3,label_11,label_27,speedMinus,speedPlus,inclinationMinus,inclinationPlus"
+        required: true
+      fontsize:
+        description: "Font size (pt) for enlarged widgets"
+        default: "22"
         required: true
 
 jobs:
@@ -19,16 +26,21 @@ jobs:
           ref: qt6
           submodules: recursive
 
-      # Insert setVisible(false) lines after ui->setupUi(this);
-      - name: Hide widgets
+      # Insert hide + font code after ui->setupUi(this);
+      - name: Patch UI
         shell: pwsh
         run: |
-          $lines = "${{ github.event.inputs.hide }}".Split(",") | ForEach-Object { "    ui->$($_.Trim())->setVisible(false);" }
+          $code = @()
+          foreach ($w in "${{ github.event.inputs.hide }}".Split(",")) { $code += "    ui->$($w.Trim())->setVisible(false);" }
+          foreach ($w in "${{ github.event.inputs.big }}".Split(",")) {
+            $w = $w.Trim()
+            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.fontsize }}); ui->$w->setFont(f); ui->$w->setMaximumWidth(QWIDGETSIZE_MAX); }"
+          }
           $f = "src/mainwindow.cpp"
           $c = Get-Content $f -Raw
-          $c = $c.Replace("ui->setupUi(this);", "ui->setupUi(this);`n" + ($lines -join "`n"))
+          $c = $c.Replace("ui->setupUi(this);", "ui->setupUi(this);`n" + ($code -join "`n"))
           Set-Content $f $c
-          Select-String -Path $f -Pattern "setVisible\(false\)" | Select-Object -First 20
+          Get-Content $f -TotalCount 60
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
