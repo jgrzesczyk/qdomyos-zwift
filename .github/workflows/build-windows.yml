@@ -5,7 +5,7 @@ on:
     inputs:
       hide:
         description: "Widgets to hide (comma separated)"
-        default: "label_17,label_10,odometer,label_19,label_12,calories,label_22,label_23,cadence,resistanceMinus,resistancePlus,label_24,label_25,resistance,label_4,label_16,watt,fanSpeedMinus,fanBar,label_21,fanSpeedPlus,weightIcon,weightDescription,weight"
+        default: "label_17,label_10,odometer,label_19,label_12,calories,label_22,label_23,cadence,resistanceMinus,resistancePlus,label_24,label_25,resistance,label_4,label_16,watt,fanSpeedMinus,fanBar,label_21,fanSpeedPlus,weightIcon,weightDescription,weight,label_9,trainProgramTotalDistance,Difficult,difficulty"
         required: true
       big:
         description: "Widgets to enlarge (comma separated)"
@@ -21,7 +21,11 @@ on:
         required: true
       hugesize:
         description: "Extra big font size (pt)"
-        default: "36"
+        default: "48"
+        required: true
+      rowcolor:
+        description: "Current step highlight color (R,G,B)"
+        default: "40,110,60"
         required: true
 
 jobs:
@@ -35,7 +39,7 @@ jobs:
           ref: qt6
           submodules: recursive
 
-      # Insert hide + font code after ui->setupUi(this);
+      # Patch src/mainwindow.cpp (hide, fonts, layout, train table)
       - name: Patch UI
         shell: pwsh
         run: |
@@ -43,20 +47,58 @@ jobs:
           foreach ($w in "${{ github.event.inputs.hide }}".Split(",")) { $code += "    ui->$($w.Trim())->setVisible(false);" }
           foreach ($w in "${{ github.event.inputs.big }}".Split(",")) {
             $w = $w.Trim()
-            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.fontsize }}); ui->$w->setFont(f); ui->$w->setMaximumWidth(QWIDGETSIZE_MAX); }"
+            $maxw = if ($w -match "(Minus|Plus)$") { "90" } else { "QWIDGETSIZE_MAX" }
+            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.fontsize }}); ui->$w->setFont(f); ui->$w->setMaximumWidth($maxw); }"
           }
           foreach ($w in "${{ github.event.inputs.huge }}".Split(",")) {
             $w = $w.Trim()
-            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.hugesize }}); ui->$w->setFont(f); }"
+            $code += "    { QFont f = ui->$w->font(); f.setPointSize(${{ github.event.inputs.hugesize }}); f.setBold(true); ui->$w->setFont(f); }"
           }
-          # move Inclination to its own line (below Speed / Heart rate)
+          # Inclination -> own line under Speed; Heart rate -> same line as Pace
           $code += "    ui->horizontalLayout_8->removeWidget(ui->frame_2);"
           $code += "    for (int i = 0; i < ui->verticalLayout_4->count(); i++) if (ui->verticalLayout_4->itemAt(i)->layout() == ui->horizontalLayout_8) { ui->verticalLayout_4->insertWidget(i + 1, ui->frame_2); break; }"
+          $code += "    ui->horizontalLayout_8->removeWidget(ui->frame_3);"
+          $code += "    ui->horizontalLayout_18->addWidget(ui->frame_3);"
+          # allow maximize / minimize (QDialog has no such buttons by default)
+          $code += "    setWindowFlags(windowFlags() | Qt::Window | Qt::WindowMinMaxButtonsHint);"
+          $code += "    ui->label_7->setText(QStringLiteral(""Current Row Remaining Time:""));"
+
+          # update(): remaining time instead of elapsed + highlight/scroll to current step
+          $old = 'trainProgram->currentRowElapsedTime().toString(QStringLiteral("hh:mm:ss")));'
+          $new = @'
+          trainProgram->currentRowRemainingTime().toString(QStringLiteral("hh:mm:ss")));
+                      {
+                          static int qzLastStep = -1;
+                          static int qzLastRows = -1;
+                          int step = trainProgram->currentRowIndex();
+                          int rows = ui->tableWidget->rowCount();
+                          if (step != qzLastStep || rows != qzLastRows) {
+                              qzLastStep = step;
+                              qzLastRows = rows;
+                              for (int r = 0; r < rows; r++) {
+                                  for (int c = 0; c < ui->tableWidget->columnCount(); c++) {
+                                      QTableWidgetItem *it = ui->tableWidget->item(r, c);
+                                      if (!it)
+                                          continue;
+                                      it->setBackground(r == step ? QBrush(QColor(${{ github.event.inputs.rowcolor }})) : QBrush());
+                                      QFont f = it->font();
+                                      f.setBold(r == step);
+                                      it->setFont(f);
+                                  }
+                              }
+                              if (step >= 0 && step < rows && ui->tableWidget->item(step, 0))
+                                  ui->tableWidget->scrollToItem(ui->tableWidget->item(step, 0), QAbstractItemView::PositionAtTop);
+                          }
+                      }
+          '@
+
           $f = "src/mainwindow.cpp"
           $c = Get-Content $f -Raw
+          if (-not $c.Contains($old)) { throw "anchor for update() not found" }
+          $c = $c.Replace($old, $new)
           $c = $c.Replace("ui->setupUi(this);", "ui->setupUi(this);`n" + ($code -join "`n"))
           Set-Content $f $c
-          Get-Content $f -TotalCount 60
+          Get-Content $f -TotalCount 80
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
