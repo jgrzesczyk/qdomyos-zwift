@@ -11,6 +11,13 @@ charts *Charts = nullptr;
 
 void MainWindow::load(bluetooth *b) {
     ui->setupUi(this);
+    
+    ui->label_22->setVisible(false); // watt icon
+    ui->label_23->setVisible(false); // watt icon
+    ui->cadence->setVisible(false); // watt icon
+    ui->label_16->setVisible(false); // watt icon
+    ui->label_4->setVisible(false);  // "Watt:" label
+    ui->watt->setVisible(false);     // value box
 
     this->bluetoothManager = b;
     connect(this->bluetoothManager, &bluetooth::deviceConnected, this, &MainWindow::trainProgramSignals);
