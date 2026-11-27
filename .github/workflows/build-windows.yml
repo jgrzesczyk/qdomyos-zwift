@@ -129,6 +129,8 @@ jobs:
         env:
           CL: /MP   # compile several .cpp files in parallel
         run: |
+          # skip unit tests (they fail to link and are not needed for the exe)
+          (Get-Content qdomyos-zwift.pro) -replace '^\s*tst/qdomyos-zwift-tests\.pro.*$', '' | Set-Content qdomyos-zwift.pro
           lrelease src/qdomyos-zwift.pri
           qmake
           nmake
